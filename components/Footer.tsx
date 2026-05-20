@@ -13,13 +13,13 @@ export function Footer() {
           </p>
         </div>
         <div className="flex flex-wrap gap-3 md:justify-end">
-          <Link href="#" className="rounded-full bg-porcelain px-4 py-2 hover:text-ink">
+          <Link href="/privacy" className="rounded-full bg-porcelain px-4 py-2 hover:text-ink">
             Privacy Policy
           </Link>
-          <Link href="#" className="rounded-full bg-porcelain px-4 py-2 hover:text-ink">
+          <Link href="/terms" className="rounded-full bg-porcelain px-4 py-2 hover:text-ink">
             Terms
           </Link>
-          <Link href="#" className="rounded-full bg-porcelain px-4 py-2 hover:text-ink">
+          <Link href="/refund-policy" className="rounded-full bg-porcelain px-4 py-2 hover:text-ink">
             Refund Policy
           </Link>
         </div>

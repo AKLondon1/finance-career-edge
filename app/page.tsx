@@ -23,7 +23,7 @@ export default function Home() {
             Start <PriceText product="ai-tailored-cv-report" /> review
           </>
         }
-        secondaryHref="/report"
+        secondaryHref="/example-output"
         secondaryLabel="View example output"
         proofPoints={credibilityFocus}
       >

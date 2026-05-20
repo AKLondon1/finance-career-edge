@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/Button";
 import { FileUploadCard } from "@/components/FileUploadCard";
 import { FormField } from "@/components/FormField";
@@ -9,7 +8,16 @@ import { IntakeSection } from "@/components/IntakeSection";
 import { PackageSelector } from "@/components/PackageSelector";
 import { PriceText } from "@/components/PriceText";
 import { packages } from "@/lib/productData";
+import { currencyFromLocale, currencyFromSearch } from "@/lib/pricing";
+import {
+  clearGeneratedReport,
+  clearVerifiedPurchase,
+  saveIntakeSubmission,
+  savePendingOrderId,
+} from "@/lib/report-storage";
 import type { PackageSlug } from "@/lib/productData";
+import type { CurrencyCode } from "@/lib/pricing";
+import type { IntakeSubmission } from "@/lib/types";
 
 type FormState = {
   fullName: string;
@@ -40,15 +48,20 @@ const initialState: FormState = {
 };
 
 export function IntakeForm() {
-  const router = useRouter();
   const [form, setForm] = useState<FormState>(initialState);
   const [errors, setErrors] = useState<Errors>({});
+  const [formError, setFormError] = useState("");
+  const [currency, setCurrency] = useState<CurrencyCode>("GBP");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Preparing secure checkout");
 
   useEffect(() => {
-    const selected = new URLSearchParams(window.location.search).get("package");
+    const search = window.location.search;
+    const selected = new URLSearchParams(search).get("package");
     if (selected === "senior-finance-review" || selected === "ai-tailored-cv-report") {
       setForm((current) => ({ ...current, packageChoice: selected }));
     }
+    setCurrency(currencyFromSearch(search) ?? currencyFromLocale(window.navigator.language));
   }, []);
 
   const selectedPackage = useMemo(
@@ -59,6 +72,7 @@ export function IntakeForm() {
   function updateField(field: keyof FormState, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: undefined, cvInput: undefined }));
+    setFormError("");
   }
 
   function validate() {
@@ -89,7 +103,7 @@ export function IntakeForm() {
     return nextErrors;
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const nextErrors = validate();
     setErrors(nextErrors);
@@ -98,11 +112,70 @@ export function IntakeForm() {
       return;
     }
 
-    window.sessionStorage.setItem(
-      "finance-career-edge-intake",
-      JSON.stringify({ ...form, selectedPackage: selectedPackage.name }),
+    setIsSubmitting(true);
+    setFormError("");
+    setLoadingMessage("Preparing secure checkout");
+
+    await delay(250);
+    setLoadingMessage("Checking your selected review");
+
+    const submission: IntakeSubmission = {
+      ...form,
+      packageName: selectedPackage.name,
+      submittedAt: new Date().toISOString(),
+    };
+
+    saveIntakeSubmission(submission);
+    clearGeneratedReport();
+    clearVerifiedPurchase();
+
+    try {
+      const response = await fetch("/api/orders/create", {
+        body: JSON.stringify({
+          currency,
+          intake: submission,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      const data = (await response.json()) as {
+        checkoutUrl?: string;
+        error?: string;
+        orderId?: string;
+      };
+
+      if (!response.ok || !data.checkoutUrl || !data.orderId) {
+        throw new Error(data.error || "Secure checkout could not be started.");
+      }
+
+      savePendingOrderId(data.orderId);
+      setLoadingMessage("Opening secure checkout");
+      window.location.assign(data.checkoutUrl);
+    } catch (error) {
+      setIsSubmitting(false);
+      setFormError(
+        error instanceof Error
+          ? error.message
+          : "Secure checkout could not be started. Please try again.",
+      );
+    }
+  }
+
+  if (isSubmitting) {
+    return (
+      <div className="rounded-[2rem] border border-ink/10 bg-white p-6 text-center shadow-soft sm:p-8">
+        <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-spruce-soft border-t-spruce" />
+        <h2 className="mt-6 text-2xl font-semibold leading-tight text-ink">
+          {loadingMessage}
+        </h2>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-ink-soft">
+          We are preparing secure checkout for your selected review.
+        </p>
+      </div>
     );
-    router.push("/report");
   }
 
   return (
@@ -232,6 +305,13 @@ export function IntakeForm() {
         </p>
       </div>
 
+      {formError ? (
+        <div className="rounded-[1.5rem] border border-brass/20 bg-[#f7efe2] p-4 text-sm leading-6 text-ink-soft shadow-card">
+          <p className="font-semibold text-ink">Checkout could not be started</p>
+          <p className="mt-1">{formError}</p>
+        </div>
+      ) : null}
+
       <div className="hidden rounded-[1.75rem] border border-ink/10 bg-white p-4 shadow-card sm:flex sm:items-center sm:justify-between sm:gap-4">
         <div>
           <p className="text-sm font-semibold text-ink">Selected review</p>
@@ -240,7 +320,7 @@ export function IntakeForm() {
           </p>
         </div>
         <Button type="submit" className="sm:min-w-56">
-          Generate my tailored review
+          Continue to secure checkout
         </Button>
       </div>
 
@@ -249,9 +329,15 @@ export function IntakeForm() {
           {selectedPackage.name}, <PriceText product={selectedPackage.slug} />
         </p>
         <Button type="submit" fullWidth>
-          Generate my tailored review
+          Continue to secure checkout
         </Button>
       </div>
     </form>
   );
+}
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
 }

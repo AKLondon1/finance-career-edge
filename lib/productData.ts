@@ -72,6 +72,14 @@ export const packages: Package[] = [
   },
 ];
 
+export function isPackageSlug(value: string | null | undefined): value is PackageSlug {
+  return value === "ai-tailored-cv-report" || value === "senior-finance-review";
+}
+
+export function getPackageBySlug(slug: PackageSlug) {
+  return packages.find((item) => item.slug === slug) ?? packages[0];
+}
+
 export const credibilityFocus = [
   "Built for senior finance roles",
   "Tailored to the job spec",

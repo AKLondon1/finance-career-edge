@@ -20,8 +20,8 @@ export function Header() {
           <Link className="hover:text-ink" href="/#packages">
             Packages
           </Link>
-          <Link className="hover:text-ink" href="/report">
-            Example report
+          <Link className="hover:text-ink" href="/example-output">
+            Example output
           </Link>
           <Link className="hover:text-ink" href="/premium-review">
             Premium review

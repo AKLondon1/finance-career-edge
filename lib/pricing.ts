@@ -77,6 +77,14 @@ export function formatPackagePrice(product: PackageSlug, currency: CurrencyCode)
   }).format(prices[product][currency]);
 }
 
+export function getPackagePrice(product: PackageSlug, currency: CurrencyCode) {
+  return prices[product][currency];
+}
+
+export function getPackageUnitAmount(product: PackageSlug, currency: CurrencyCode) {
+  return getPackagePrice(product, currency) * 100;
+}
+
 function localeForCurrency(currency: CurrencyCode) {
   if (currency === "USD") {
     return "en-US";
