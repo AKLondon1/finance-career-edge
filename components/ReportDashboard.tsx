@@ -10,6 +10,7 @@ import { PriorityFixCard } from "@/components/PriorityFixCard";
 import { ReportCategoryNav } from "@/components/ReportCategoryNav";
 import { ReportDashboardHeader } from "@/components/ReportDashboardHeader";
 import { ReportSection } from "@/components/ReportSection";
+import type { ReportSectionId } from "@/lib/report-sections";
 import type { GeneratedReport, ScoreAssessment } from "@/lib/types";
 
 type ReportDashboardProps = {
@@ -20,6 +21,8 @@ type ReportDashboardProps = {
   headerIntro?: string;
   actionBar?: ReactNode;
   footerCta?: ReactNode;
+  activeSection?: ReportSectionId;
+  sectionBaseHref?: string;
 };
 
 export function ReportDashboard({
@@ -30,6 +33,8 @@ export function ReportDashboard({
   headerIntro,
   actionBar,
   footerCta,
+  activeSection = "overview",
+  sectionBaseHref = "/report",
 }: ReportDashboardProps) {
   const roleFitCards = buildRoleFitCards(report);
   const keywordGroups = buildKeywordGroups(report.roleReport.keywordGaps);
@@ -50,40 +55,40 @@ export function ReportDashboard({
         title={headerTitle}
       />
 
-      <ReportCategoryNav />
+      <ReportCategoryNav activeSection={activeSection} baseHref={sectionBaseHref} />
 
-      <ReportSection
-        id="overview"
-        eyebrow="Overview"
-        title="Dashboard summary"
-        description="The quickest view of role fit, priority fixes and the senior-finance signals to strengthen first."
-      >
-        <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-          <InsightCard title="Executive summary" eyebrow="Downloadable tailored role report" tone="spruce">
-            <p>{report.executiveSummary}</p>
-          </InsightCard>
+      <div className="min-h-[34rem]">
+        <ActiveReportSection
+          activeSection={activeSection}
+          interviewCards={interviewCards}
+          keywordGroups={keywordGroups}
+          report={report}
+          roleFitCards={roleFitCards}
+        />
+      </div>
 
-          <InsightCard title="Top priority fixes" eyebrow="What to change first" tone="brass">
-            <div className="grid gap-3">
-              {report.roleReport.priorityFixes.slice(0, 3).map((fix, index) => (
-                <PriorityFixCard fix={fix} index={index} key={fix.title} />
-              ))}
-            </div>
-          </InsightCard>
-        </div>
+      {activeSection === "next-steps" ? footerCta : null}
+    </div>
+  );
+}
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {report.roleReport.assessments.map((assessment) => (
-            <DashboardMetricCard
-              key={assessment.label}
-              label={assessment.label}
-              score={assessment.score}
-              text={assessment.text}
-            />
-          ))}
-        </div>
-      </ReportSection>
+type ActiveReportSectionProps = {
+  activeSection: ReportSectionId;
+  report: GeneratedReport;
+  roleFitCards: ReturnType<typeof buildRoleFitCards>;
+  keywordGroups: ReturnType<typeof buildKeywordGroups>;
+  interviewCards: ReturnType<typeof buildInterviewCards>;
+};
 
+function ActiveReportSection({
+  activeSection,
+  report,
+  roleFitCards,
+  keywordGroups,
+  interviewCards,
+}: ActiveReportSectionProps) {
+  if (activeSection === "role-fit") {
+    return (
       <ReportSection
         id="role-fit"
         eyebrow="Role Fit"
@@ -103,7 +108,11 @@ export function ReportDashboard({
           ))}
         </div>
       </ReportSection>
+    );
+  }
 
+  if (activeSection === "cv-draft") {
+    return (
       <ReportSection
         id="cv-draft"
         eyebrow="CV Draft"
@@ -140,7 +149,11 @@ export function ReportDashboard({
           </InsightCard>
         </div>
       </ReportSection>
+    );
+  }
 
+  if (activeSection === "keywords") {
+    return (
       <ReportSection
         id="keywords"
         eyebrow="Keywords"
@@ -160,7 +173,11 @@ export function ReportDashboard({
           ))}
         </div>
       </ReportSection>
+    );
+  }
 
+  if (activeSection === "interview-prep") {
+    return (
       <ReportSection
         id="interview-prep"
         eyebrow="Interview Prep"
@@ -179,7 +196,11 @@ export function ReportDashboard({
           ))}
         </div>
       </ReportSection>
+    );
+  }
 
+  if (activeSection === "next-steps") {
+    return (
       <ReportSection
         id="next-steps"
         eyebrow="Next Steps"
@@ -209,9 +230,41 @@ export function ReportDashboard({
           </div>
         </div>
       </ReportSection>
+    );
+  }
 
-      {footerCta}
-    </div>
+  return (
+    <ReportSection
+      id="overview"
+      eyebrow="Overview"
+      title="Dashboard summary"
+      description="The quickest view of role fit, priority fixes and the senior-finance signals to strengthen first."
+    >
+      <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+        <InsightCard title="Executive summary" eyebrow="Downloadable tailored role report" tone="spruce">
+          <p>{report.executiveSummary}</p>
+        </InsightCard>
+
+        <InsightCard title="Top priority fixes" eyebrow="What to change first" tone="brass">
+          <div className="grid gap-3">
+            {report.roleReport.priorityFixes.slice(0, 3).map((fix, index) => (
+              <PriorityFixCard fix={fix} index={index} key={fix.title} />
+            ))}
+          </div>
+        </InsightCard>
+      </div>
+
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {report.roleReport.assessments.map((assessment) => (
+          <DashboardMetricCard
+            key={assessment.label}
+            label={assessment.label}
+            score={assessment.score}
+            text={assessment.text}
+          />
+        ))}
+      </div>
+    </ReportSection>
   );
 }
 

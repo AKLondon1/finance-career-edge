@@ -142,18 +142,35 @@ export function IntakeForm() {
       });
 
       const data = (await response.json()) as {
-        checkoutUrl?: string;
         error?: string;
         orderId?: string;
       };
 
-      if (!response.ok || !data.checkoutUrl || !data.orderId) {
-        throw new Error(data.error || "Secure checkout could not be started.");
+      if (!response.ok || !data.orderId) {
+        throw new Error(data.error || "Your review details could not be saved.");
       }
 
       savePendingOrderId(data.orderId);
       setLoadingMessage("Opening secure checkout");
-      window.location.assign(data.checkoutUrl);
+
+      const checkoutResponse = await fetch("/api/checkout/create-session", {
+        body: JSON.stringify({ orderId: data.orderId }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const checkoutData = (await checkoutResponse.json()) as {
+        checkoutUrl?: string;
+        error?: string;
+      };
+
+      if (!checkoutResponse.ok || !checkoutData.checkoutUrl) {
+        throw new Error(checkoutData.error || "Secure checkout could not be started.");
+      }
+
+      setLoadingMessage("Opening secure checkout");
+      window.location.assign(checkoutData.checkoutUrl);
     } catch (error) {
       setIsSubmitting(false);
       setFormError(

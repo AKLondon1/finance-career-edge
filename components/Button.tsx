@@ -28,7 +28,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   const classes = cn(
-    "focus-ring inline-flex min-h-12 items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition sm:px-6",
+    "focus-ring inline-flex min-h-12 items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 sm:px-6",
     variants[variant],
     fullWidth && "w-full",
     className,

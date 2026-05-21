@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
-import { getPackageBySlug, isPackageSlug } from "@/lib/productData";
-import { getPackageUnitAmount, isCurrencyCode } from "@/lib/pricing";
+import { getOrder, updateOrder } from "@/lib/orders";
 import { getStripeClient } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
 type CheckoutRequestBody = {
-  packageSlug?: string;
-  currency?: string;
-  email?: string;
-  targetRole?: string;
-  targetCompany?: string;
+  orderId?: string;
 };
 
 const checkoutUnavailable =
@@ -28,59 +23,80 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!isPackageSlug(body.packageSlug)) {
+  if (!body.orderId) {
     return NextResponse.json(
-      { error: "Please choose a review package before continuing to secure checkout." },
+      { error: "Please start from the review details page before continuing to secure checkout." },
       { status: 400 },
     );
   }
 
-  const requestedCurrency = body.currency?.toUpperCase() ?? null;
-  const currency = isCurrencyCode(requestedCurrency) ? requestedCurrency : "GBP";
-  const selectedPackage = getPackageBySlug(body.packageSlug);
+  const order = await getOrder(body.orderId);
+
+  if (!order) {
+    return NextResponse.json(
+      { error: "Please start from the review details page before continuing to secure checkout." },
+      { status: 404 },
+    );
+  }
+
+  if (order.status === "paid") {
+    return NextResponse.json(
+      { error: "This order has already been confirmed." },
+      { status: 409 },
+    );
+  }
+
   const stripe = getStripeClient();
 
   if (!stripe) {
+    console.warn("Checkout unavailable: Stripe secret missing");
     return NextResponse.json({ error: checkoutUnavailable }, { status: 503 });
   }
 
   const appUrl = getAppUrl(request);
-  const targetRole = clean(body.targetRole) || "Senior finance role";
-  const targetCompany = clean(body.targetCompany);
 
   try {
     const session = await stripe.checkout.sessions.create({
-      cancel_url: `${appUrl}/checkout/cancel?package=${selectedPackage.slug}&currency=${currency}`,
-      customer_email: isEmail(body.email) ? body.email : undefined,
+      cancel_url: `${appUrl}/checkout/cancel?package=${order.packageSlug}&currency=${order.currency}&orderId=${order.id}`,
+      customer_email: order.customerEmail,
       line_items: [
         {
           price_data: {
-            currency: currency.toLowerCase(),
+            currency: order.currency.toLowerCase(),
             product_data: {
-              description: selectedPackage.description,
-              name: selectedPackage.name,
+              description:
+                "Downloadable tailored role report and new CV draft for this application.",
+              name: order.packageName,
             },
-            unit_amount: getPackageUnitAmount(selectedPackage.slug, currency),
+            unit_amount: order.amount,
           },
           quantity: 1,
         },
       ],
       metadata: {
-        currency,
-        packageName: selectedPackage.name,
-        packageSlug: selectedPackage.slug,
-        ...(targetCompany ? { targetCompany } : {}),
-        targetRole,
+        currency: order.currency,
+        customerEmail: order.customerEmail,
+        orderId: order.id,
+        packageName: order.packageName,
+        packageSlug: order.packageSlug,
+        ...(order.targetCompany ? { targetCompany: order.targetCompany } : {}),
+        targetRole: order.targetRole ?? "",
       },
       mode: "payment",
       success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
     });
 
     if (!session.url) {
+      await updateOrder(order.id, { status: "failed" });
       return NextResponse.json({ error: checkoutUnavailable }, { status: 500 });
     }
 
-    return NextResponse.json({ url: session.url });
+    await updateOrder(order.id, {
+      status: "checkout_started",
+      stripeSessionId: session.id,
+    });
+
+    return NextResponse.json({ checkoutUrl: session.url, orderId: order.id });
   } catch {
     return NextResponse.json({ error: checkoutUnavailable }, { status: 500 });
   }
@@ -94,12 +110,4 @@ function getAppUrl(request: Request) {
   }
 
   return new URL(request.url).origin;
-}
-
-function clean(value: string | undefined) {
-  return value?.trim().slice(0, 500) ?? "";
-}
-
-function isEmail(value: string | undefined) {
-  return Boolean(value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
 }

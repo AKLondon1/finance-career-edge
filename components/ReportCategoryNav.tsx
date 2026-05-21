@@ -1,27 +1,33 @@
-const categories = [
-  { href: "#overview", label: "Overview" },
-  { href: "#role-fit", label: "Role Fit" },
-  { href: "#cv-draft", label: "CV Draft" },
-  { href: "#keywords", label: "Keywords" },
-  { href: "#interview-prep", label: "Interview Prep" },
-  { href: "#next-steps", label: "Next Steps" },
-];
+import Link from "next/link";
+import { reportSections, sectionHref, type ReportSectionId } from "@/lib/report-sections";
+import { cn } from "@/lib/utils";
 
-export function ReportCategoryNav() {
+type ReportCategoryNavProps = {
+  activeSection: ReportSectionId;
+  baseHref: string;
+};
+
+export function ReportCategoryNav({ activeSection, baseHref }: ReportCategoryNavProps) {
   return (
     <nav
       aria-label="Report categories"
       className="sticky top-[73px] z-30 -mx-4 border-y border-ink/10 bg-porcelain/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-full sm:border sm:shadow-card"
     >
       <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:justify-center sm:overflow-visible sm:pb-0">
-        {categories.map((category) => (
-          <a
-            className="focus-ring whitespace-nowrap rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-ink-soft shadow-card transition hover:bg-ink hover:text-white"
-            href={category.href}
-            key={category.href}
+        {reportSections.map((category) => (
+          <Link
+            aria-current={activeSection === category.id ? "page" : undefined}
+            className={cn(
+              "focus-ring whitespace-nowrap rounded-full px-4 py-2.5 text-sm font-semibold shadow-card transition",
+              activeSection === category.id
+                ? "bg-ink text-white"
+                : "bg-white text-ink-soft hover:bg-ink hover:text-white",
+            )}
+            href={sectionHref(baseHref, category.id)}
+            key={category.id}
           >
             {category.label}
-          </a>
+          </Link>
         ))}
       </div>
     </nav>

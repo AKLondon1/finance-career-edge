@@ -51,6 +51,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ report: existingReport.reportJson, reportStatus: "ready" });
   }
 
+  if (order.reportStatus === "generating") {
+    return NextResponse.json(
+      { error: "Your report is already being prepared. Please try again shortly." },
+      { status: 409 },
+    );
+  }
+
   const intake = await getIntakeByOrderId(order.id);
 
   if (!intake) {

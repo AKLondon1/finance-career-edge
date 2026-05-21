@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/Button";
 import { InsightCard } from "@/components/InsightCard";
 import { getPackageBySlug, isPackageSlug } from "@/lib/productData";
@@ -24,12 +24,22 @@ type VerificationResponse = {
   targetRole?: string;
 };
 
+type GenerateResponse = {
+  error?: string;
+  reportStatus?: ReportStatus;
+};
+
 export function CheckoutSuccessClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [state, setState] = useState<VerificationState>("verifying");
   const [message, setMessage] = useState("Confirming your secure checkout.");
   const [actionHref, setActionHref] = useState("/report");
   const [actionLabel, setActionLabel] = useState("View my report");
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [needsReportPreparation, setNeedsReportPreparation] = useState(false);
+  const [isPreparingReport, setIsPreparingReport] = useState(false);
+  const [prepareError, setPrepareError] = useState("");
   const [successTitle, setSuccessTitle] = useState(
     "Your tailored report and CV draft are ready.",
   );
@@ -57,6 +67,7 @@ export function CheckoutSuccessClient() {
 
         const selectedPackage = getPackageBySlug(data.packageSlug);
         const reportHref = `/report?orderId=${encodeURIComponent(data.orderId)}`;
+        setOrderId(data.orderId);
         savePendingOrderId(data.orderId);
         saveVerifiedPurchase({
           currency: data.currency ?? "GBP",
@@ -72,9 +83,11 @@ export function CheckoutSuccessClient() {
         setActionHref(reportHref);
         if (data.reportStatus === "ready") {
           setActionLabel("View my report");
+          setNeedsReportPreparation(false);
           setSuccessTitle("Your tailored report and CV draft are ready.");
         } else {
-          setActionLabel("Prepare my report");
+          setActionLabel("Get my report");
+          setNeedsReportPreparation(true);
           setSuccessTitle("Payment confirmed.");
         }
         setState("success");
@@ -91,6 +104,41 @@ export function CheckoutSuccessClient() {
 
     void verifyPayment();
   }, [searchParams]);
+
+  async function handlePrepareReport() {
+    if (!orderId || isPreparingReport) {
+      return;
+    }
+
+    setIsPreparingReport(true);
+    setPrepareError("");
+    setMessage("Preparing your tailored report and new CV draft.");
+
+    try {
+      const response = await fetch("/api/reports/generate", {
+        body: JSON.stringify({ orderId }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const data = (await response.json()) as GenerateResponse;
+
+      if (!response.ok || data.reportStatus !== "ready") {
+        throw new Error(data.error || "We could not prepare your report. Please try again shortly.");
+      }
+
+      router.push(`/report?orderId=${encodeURIComponent(orderId)}`);
+    } catch (error) {
+      setPrepareError(
+        error instanceof Error
+          ? error.message
+          : "We could not prepare your report. Please try again shortly.",
+      );
+      setMessage("Payment is confirmed. You can try preparing your report again.");
+      setIsPreparingReport(false);
+    }
+  }
 
   if (state === "verifying") {
     return (
@@ -131,9 +179,25 @@ export function CheckoutSuccessClient() {
       <p className="mx-auto mt-4 max-w-xl leading-7 text-ink-soft">
         {message}
       </p>
-      <Button href={actionHref} className="mt-7">
-        {actionLabel}
-      </Button>
+      {prepareError ? (
+        <p className="mx-auto mt-4 max-w-xl rounded-[1.25rem] bg-[#f7efe2] p-4 text-sm leading-6 text-ink-soft">
+          {prepareError}
+        </p>
+      ) : null}
+      {needsReportPreparation ? (
+        <Button
+          className="mt-7"
+          disabled={isPreparingReport}
+          onClick={handlePrepareReport}
+          type="button"
+        >
+          {isPreparingReport ? "Preparing your report..." : actionLabel}
+        </Button>
+      ) : (
+        <Button href={actionHref} className="mt-7">
+          {actionLabel}
+        </Button>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Button } from "@/components/Button";
 import { InsightCard } from "@/components/InsightCard";
 import { ReportActions } from "@/components/ReportActions";
 import { ReportDashboard } from "@/components/ReportDashboard";
+import { normaliseReportSection } from "@/lib/report-sections";
 import {
   loadGeneratedReport,
   loadIntakeSubmission,
@@ -40,6 +41,7 @@ type GenerateResponse = {
 
 export function ReportPageClient() {
   const searchParams = useSearchParams();
+  const activeSection = normaliseReportSection(searchParams.get("section"));
   const [reportState, setReportState] = useState<ReportState>({
     order: null,
     intake: null,
@@ -234,7 +236,7 @@ export function ReportPageClient() {
           onClick={handleGenerateReport}
           type="button"
         >
-          {isGenerating ? "Preparing report" : "Prepare my report"}
+          {isGenerating ? "Preparing your report..." : "Get my report"}
         </Button>
       </div>
     );
@@ -247,10 +249,24 @@ export function ReportPageClient() {
   return (
     <ReportDashboard
       actionBar={<ReportActions report={reportState.report} />}
+      activeSection={activeSection}
       generatedDate={formatGeneratedDate(reportState.report.id)}
       report={reportState.report}
+      sectionBaseHref={buildReportSectionBaseHref(searchParams, reportState.orderId)}
     />
   );
+}
+
+function buildReportSectionBaseHref(searchParams: { toString: () => string }, orderId?: string) {
+  const params = new URLSearchParams(searchParams.toString());
+  params.delete("section");
+
+  if (orderId) {
+    params.set("orderId", orderId);
+  }
+
+  const query = params.toString();
+  return query ? `/report?${query}` : "/report";
 }
 
 function CheckoutRequiredState({ packageSlug }: { packageSlug: string }) {

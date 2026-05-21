@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
-import { createOrder, isOrderStorageConfigured, updateOrder } from "@/lib/orders";
+import { createOrder } from "@/lib/orders";
 import { isPackageSlug } from "@/lib/productData";
 import { isCurrencyCode } from "@/lib/pricing";
-import { getStripeClient } from "@/lib/stripe";
+import {
+  getSupabaseConfigIssue,
+  SupabaseRequestError,
+} from "@/lib/supabase/server";
 import type { CurrencyCode } from "@/lib/pricing";
 import type { IntakeSubmission } from "@/lib/types";
 
@@ -13,8 +16,8 @@ type CreateOrderRequest = {
   intake?: Partial<IntakeSubmission>;
 };
 
-const checkoutUnavailable =
-  "Secure checkout is temporarily unavailable. Please try again shortly.";
+const orderSetupError =
+  "Order setup is temporarily unavailable. Please try again shortly.";
 
 export async function POST(request: Request) {
   let body: CreateOrderRequest;
@@ -23,7 +26,7 @@ export async function POST(request: Request) {
     body = (await request.json()) as CreateOrderRequest;
   } catch {
     return NextResponse.json(
-      { error: "We could not prepare secure checkout. Please check your review details and try again." },
+      { error: "We could not save your review details. Please check the form and try again." },
       { status: 400 },
     );
   }
@@ -34,65 +37,36 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
-  if (!isOrderStorageConfigured() && process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: checkoutUnavailable }, { status: 503 });
+  const configIssue = getSupabaseConfigIssue();
+
+  if (configIssue === "missing-url") {
+    console.warn("Order create failed: Supabase URL missing");
+    return NextResponse.json({ error: orderSetupError }, { status: 503 });
   }
 
-  const stripe = getStripeClient();
-
-  if (!stripe) {
-    return NextResponse.json({ error: checkoutUnavailable }, { status: 503 });
+  if (configIssue === "missing-service-key") {
+    console.warn("Order create failed: Supabase service key missing");
+    return NextResponse.json({ error: orderSetupError }, { status: 503 });
   }
-
-  const intake = body.intake as IntakeSubmission;
-  const currency = normaliseCurrency(body.currency);
-  const appUrl = getAppUrl(request);
 
   try {
-    const order = await createOrder({ currency, intake });
-    const session = await stripe.checkout.sessions.create({
-      cancel_url: `${appUrl}/checkout/cancel?package=${order.packageSlug}&currency=${order.currency}&orderId=${order.id}`,
-      customer_email: intake.email,
-      line_items: [
-        {
-          price_data: {
-            currency: order.currency.toLowerCase(),
-            product_data: {
-              description:
-                "Downloadable tailored role report and new CV draft for this application.",
-              name: order.packageName,
-            },
-            unit_amount: order.amount,
-          },
-          quantity: 1,
-        },
-      ],
-      metadata: {
-        currency: order.currency,
-        customerEmail: order.customerEmail,
-        orderId: order.id,
-        packageName: order.packageName,
-        packageSlug: order.packageSlug,
-        ...(order.targetCompany ? { targetCompany: order.targetCompany } : {}),
-        targetRole: order.targetRole ?? "",
-      },
-      mode: "payment",
-      success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+    const order = await createOrder({
+      currency: normaliseCurrency(body.currency),
+      intake: body.intake as IntakeSubmission,
     });
 
-    if (!session.url) {
-      await updateOrder(order.id, { status: "failed" });
-      return NextResponse.json({ error: checkoutUnavailable }, { status: 500 });
+    return NextResponse.json({ order, orderId: order.id });
+  } catch (error) {
+    if (error instanceof SupabaseRequestError) {
+      console.warn("Order create failed: Supabase insert error", {
+        response: error.responseText,
+        status: error.status,
+      });
+    } else {
+      console.warn("Order create failed: Supabase insert error");
     }
 
-    await updateOrder(order.id, {
-      status: "checkout_started",
-      stripeSessionId: session.id,
-    });
-
-    return NextResponse.json({ checkoutUrl: session.url, orderId: order.id });
-  } catch {
-    return NextResponse.json({ error: checkoutUnavailable }, { status: 500 });
+    return NextResponse.json({ error: orderSetupError }, { status: 500 });
   }
 }
 
@@ -129,14 +103,4 @@ function validateOrderRequest(body: CreateOrderRequest) {
 function normaliseCurrency(value: string | undefined): CurrencyCode {
   const upper = value?.toUpperCase() ?? null;
   return isCurrencyCode(upper) ? upper : "GBP";
-}
-
-function getAppUrl(request: Request) {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
-
-  if (configured) {
-    return configured;
-  }
-
-  return new URL(request.url).origin;
 }
