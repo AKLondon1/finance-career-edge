@@ -8,6 +8,10 @@ export type IntakeSubmission = {
   targetCompany?: string;
   jobAdvert?: string;
   cvFileName?: string;
+  cvFileSize?: number;
+  cvFileType?: string;
+  cvStorageBucket?: string;
+  cvStoragePath?: string;
   cvText?: string;
   achievements?: string;
   concerns?: string;
@@ -44,6 +48,10 @@ export type IntakeSubmissionRecord = {
   createdAt: string;
   cvText?: string;
   cvFileName?: string;
+  cvFileSize?: number;
+  cvFileType?: string;
+  cvStorageBucket?: string;
+  cvStoragePath?: string;
   targetRole?: string;
   targetCompany?: string;
   jobAdvertText?: string;

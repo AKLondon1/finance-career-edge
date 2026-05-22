@@ -9,7 +9,7 @@ Finance Career Edge is a premium Next.js app for UK finance professionals applyi
   - Senior Finance Review, £249
 - Public example output page at `/example-output` showing the dashboard-style report and CV draft structure.
 - Low-friction intake form with package preselection via query string.
-- Client-side CV file selection UI plus paste-CV alternative.
+- Private Supabase Storage upload for PDF, DOCX and TXT CV files, plus a paste-CV alternative.
 - Supabase-backed order storage for orders, intake submissions and generated report outputs.
 - Stripe Checkout flow with server-side payment verification and webhook order updates.
 - Server-side report access control so paid report output is only prepared for confirmed paid orders.
@@ -19,7 +19,7 @@ Finance Career Edge is a premium Next.js app for UK finance professionals applyi
 - Senior review page explaining the human quality layer.
 - Launch-draft pages for privacy, terms and refund policy.
 
-The app does not yet connect authentication, real file storage, an admin dashboard, subscriptions or a blog.
+The app does not yet connect authentication, an admin dashboard, subscriptions or a blog.
 
 ## Paid Report Journey
 
@@ -66,7 +66,8 @@ npm run build
 
 1. Create a Supabase project.
 2. Run `supabase/schema.sql` in the Supabase SQL editor.
-3. Add these values to `.env.local`:
+3. Confirm the private `cv-uploads` Storage bucket exists.
+4. Add these values to `.env.local`:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
@@ -74,6 +75,17 @@ SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 Keep the service role key server-side only. Do not expose it in client code.
+
+The schema also adds metadata columns for uploaded CV files and a unique index on `report_outputs(order_id)` so report generation reuses the existing output for an order.
+
+## CV Upload Handling
+
+- Accepted CV formats: PDF, DOCX and TXT.
+- Maximum CV file size: 5MB.
+- Uploaded files are stored in the private Supabase Storage bucket `cv-uploads`.
+- The database stores file metadata and storage path, not a public URL.
+- Plain text CV uploads are extracted server-side and can be used as report evidence.
+- PDF and DOCX text extraction is not connected yet, so users should paste CV text as well when they want the AI report to use the full CV content immediately.
 
 ## Stripe Checkout Setup
 
@@ -123,7 +135,7 @@ The email route is prepared for report-ready delivery and returns safely when em
 
 ## Suggested Next Build Steps
 
-- Connect secure file upload and document parsing.
+- Add PDF and DOCX text extraction for uploaded CVs.
 - Add email delivery for payment confirmation and report-ready notifications.
 - Review several real Gemini-generated reports against senior-finance quality standards.
 - Add durable report delivery and support workflows for Senior Finance Review.
@@ -132,7 +144,7 @@ The email route is prepared for report-ready delivery and returns safely when em
 ## Next Integrations
 
 - Email delivery through a transactional email service.
-- Secure file storage for uploaded CV documents.
+- PDF/DOCX document parsing for uploaded CV documents.
 - Confirmed data retention policy and deletion process.
 - Human-review operations flow for the £249 Senior Finance Review.
 

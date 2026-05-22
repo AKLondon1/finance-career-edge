@@ -1,11 +1,12 @@
 "use client";
 
+import { CV_FILE_ACCEPT, formatMaxCvFileSize } from "@/lib/cv-file-rules";
 import { cn } from "@/lib/utils";
 
 type FileUploadCardProps = {
   fileName: string;
   error?: string;
-  onChange: (fileName: string) => void;
+  onChange: (file: File | null) => void;
 };
 
 export function FileUploadCard({ fileName, error, onChange }: FileUploadCardProps) {
@@ -23,16 +24,16 @@ export function FileUploadCard({ fileName, error, onChange }: FileUploadCardProp
         {fileName || "Choose your CV file"}
       </span>
       <span className="mt-2 block text-sm leading-6 text-ink-soft">
-        PDF, DOC, DOCX or TXT
+        PDF, DOCX or TXT, up to {formatMaxCvFileSize()}
       </span>
       <span className="mt-4 inline-flex rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white">
         Select file
       </span>
       <input
-        accept=".pdf,.doc,.docx,.txt"
+        accept={CV_FILE_ACCEPT}
         className="sr-only"
         type="file"
-        onChange={(event) => onChange(event.target.files?.[0]?.name ?? "")}
+        onChange={(event) => onChange(event.target.files?.[0] ?? null)}
       />
       {error ? (
         <span className="mt-3 block rounded-2xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700">

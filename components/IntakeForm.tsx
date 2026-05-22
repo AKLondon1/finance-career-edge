@@ -7,6 +7,12 @@ import { FormField } from "@/components/FormField";
 import { IntakeSection } from "@/components/IntakeSection";
 import { PackageSelector } from "@/components/PackageSelector";
 import { PriceText } from "@/components/PriceText";
+import {
+  formatMaxCvFileSize,
+  getFileExtension,
+  isAcceptedCvExtension,
+  MAX_CV_FILE_SIZE_BYTES,
+} from "@/lib/cv-file-rules";
 import { packages } from "@/lib/productData";
 import { currencyFromLocale, currencyFromSearch } from "@/lib/pricing";
 import {
@@ -52,6 +58,7 @@ export function IntakeForm() {
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState("");
   const [currency, setCurrency] = useState<CurrencyCode>("GBP");
+  const [selectedCvFile, setSelectedCvFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Preparing secure checkout");
 
@@ -75,6 +82,13 @@ export function IntakeForm() {
     setFormError("");
   }
 
+  function updateCvFile(file: File | null) {
+    setSelectedCvFile(file);
+    setForm((current) => ({ ...current, cvFileName: file?.name ?? "" }));
+    setErrors((current) => ({ ...current, cvInput: undefined }));
+    setFormError("");
+  }
+
   function validate() {
     const nextErrors: Errors = {};
 
@@ -94,6 +108,16 @@ export function IntakeForm() {
 
     if (!form.cvFileName && !form.cvText.trim()) {
       nextErrors.cvInput = "Upload your CV or paste the CV text.";
+    }
+
+    if (selectedCvFile) {
+      const extension = getFileExtension(selectedCvFile.name);
+
+      if (!isAcceptedCvExtension(extension)) {
+        nextErrors.cvInput = "Upload a PDF, DOCX or TXT version of your CV.";
+      } else if (selectedCvFile.size > MAX_CV_FILE_SIZE_BYTES) {
+        nextErrors.cvInput = `Upload a CV file under ${formatMaxCvFileSize()}.`;
+      }
     }
 
     if (form.cvText.trim().length > 0 && form.cvText.trim().length < 60) {
@@ -130,16 +154,23 @@ export function IntakeForm() {
     clearVerifiedPurchase();
 
     try {
-      const response = await fetch("/api/orders/create", {
-        body: JSON.stringify({
-          currency,
-          intake: submission,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-        method: "POST",
-      });
+      setLoadingMessage(selectedCvFile ? "Saving your CV securely" : "Saving your review details");
+
+      const response = selectedCvFile
+        ? await fetch("/api/orders/create", {
+            body: buildOrderFormData(currency, submission, selectedCvFile),
+            method: "POST",
+          })
+        : await fetch("/api/orders/create", {
+            body: JSON.stringify({
+              currency,
+              intake: submission,
+            }),
+            headers: {
+              "Content-Type": "application/json",
+            },
+            method: "POST",
+          });
 
       const data = (await response.json()) as {
         error?: string;
@@ -217,11 +248,11 @@ export function IntakeForm() {
         <FileUploadCard
           error={errors.cvInput}
           fileName={form.cvFileName}
-          onChange={(fileName) => updateField("cvFileName", fileName)}
+          onChange={updateCvFile}
         />
         <FormField
           label="Paste CV text instead"
-          hint="Use this if you prefer not to select a file."
+          hint="For the sharpest review, paste the CV wording here as well."
           value={form.cvText}
           error={errors.cvText}
           multiline
@@ -324,7 +355,7 @@ export function IntakeForm() {
 
       {formError ? (
         <div className="rounded-[1.5rem] border border-brass/20 bg-[#f7efe2] p-4 text-sm leading-6 text-ink-soft shadow-card">
-          <p className="font-semibold text-ink">Checkout could not be started</p>
+          <p className="font-semibold text-ink">Review could not be saved</p>
           <p className="mt-1">{formError}</p>
         </div>
       ) : null}
@@ -357,4 +388,16 @@ function delay(milliseconds: number) {
   return new Promise((resolve) => {
     window.setTimeout(resolve, milliseconds);
   });
+}
+
+function buildOrderFormData(
+  currency: CurrencyCode,
+  submission: IntakeSubmission,
+  cvFile: File,
+) {
+  const formData = new FormData();
+  formData.set("currency", currency);
+  formData.set("intake", JSON.stringify(submission));
+  formData.set("cvFile", cvFile);
+  return formData;
 }

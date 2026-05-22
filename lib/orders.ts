@@ -46,6 +46,10 @@ type OrderRow = {
 type IntakeRow = {
   created_at: string;
   cv_file_name: string | null;
+  cv_file_size: number | null;
+  cv_file_type: string | null;
+  cv_storage_bucket: string | null;
+  cv_storage_path: string | null;
   cv_text: string | null;
   id: string;
   job_advert_text: string | null;
@@ -109,6 +113,10 @@ export async function createOrder(input: CreateOrderInput) {
     await supabaseRequest<IntakeRow[]>("intake_submissions?select=*", {
       body: JSON.stringify({
         cv_file_name: input.intake.cvFileName || null,
+        cv_file_size: input.intake.cvFileSize || null,
+        cv_file_type: input.intake.cvFileType || null,
+        cv_storage_bucket: input.intake.cvStorageBucket || null,
+        cv_storage_path: input.intake.cvStoragePath || null,
         cv_text: input.intake.cvText || null,
         job_advert_text: input.intake.jobAdvert || null,
         main_cv_concerns: input.intake.concerns || null,
@@ -150,6 +158,10 @@ export async function createOrder(input: CreateOrderInput) {
   fallbackIntakes.set(order.id, {
     createdAt: now,
     cvFileName: input.intake.cvFileName || undefined,
+    cvFileSize: input.intake.cvFileSize || undefined,
+    cvFileType: input.intake.cvFileType || undefined,
+    cvStorageBucket: input.intake.cvStorageBucket || undefined,
+    cvStoragePath: input.intake.cvStoragePath || undefined,
     cvText: input.intake.cvText || undefined,
     id: crypto.randomUUID(),
     jobAdvertText: input.intake.jobAdvert || undefined,
@@ -266,21 +278,24 @@ export async function saveReportOutput(
   const now = new Date().toISOString();
 
   if (isOrderStorageConfigured()) {
-    const rows = await supabaseRequest<ReportOutputRow[]>("report_outputs?select=*", {
-      body: JSON.stringify({
-        cv_draft_text: cvDraftText,
-        order_id: order.id,
-        package_slug: order.packageSlug,
-        report_json: report,
-        report_text: reportText,
-        target_company: order.targetCompany || null,
-        target_role: order.targetRole || null,
-      }),
-      headers: {
-        prefer: "return=representation",
+    const rows = await supabaseRequest<ReportOutputRow[]>(
+      "report_outputs?select=*&on_conflict=order_id",
+      {
+        body: JSON.stringify({
+          cv_draft_text: cvDraftText,
+          order_id: order.id,
+          package_slug: order.packageSlug,
+          report_json: report,
+          report_text: reportText,
+          target_company: order.targetCompany || null,
+          target_role: order.targetRole || null,
+        }),
+        headers: {
+          prefer: "resolution=merge-duplicates,return=representation",
+        },
+        method: "POST",
       },
-      method: "POST",
-    });
+    );
     await updateOrder(order.id, { reportStatus: "ready" });
     return mapReportOutputRow(rows[0]);
   }
@@ -309,6 +324,10 @@ export function buildSubmissionFromOrder(
     achievements: intake.topAchievements,
     concerns: intake.mainCvConcerns,
     cvFileName: intake.cvFileName,
+    cvFileSize: intake.cvFileSize,
+    cvFileType: intake.cvFileType,
+    cvStorageBucket: intake.cvStorageBucket,
+    cvStoragePath: intake.cvStoragePath,
     cvText: intake.cvText,
     email: order.customerEmail,
     fullName: order.customerName ?? "",
@@ -348,6 +367,10 @@ function mapIntakeRow(row: IntakeRow): IntakeSubmissionRecord {
   return {
     createdAt: row.created_at,
     cvFileName: row.cv_file_name ?? undefined,
+    cvFileSize: row.cv_file_size ?? undefined,
+    cvFileType: row.cv_file_type ?? undefined,
+    cvStorageBucket: row.cv_storage_bucket ?? undefined,
+    cvStoragePath: row.cv_storage_path ?? undefined,
     cvText: row.cv_text ?? undefined,
     id: row.id,
     jobAdvertText: row.job_advert_text ?? undefined,
