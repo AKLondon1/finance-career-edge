@@ -15,6 +15,13 @@ export default function TermsPage() {
           ],
         },
         {
+          title: "Paid digital outputs",
+          body: [
+            "The AI Tailored CV & Role Report is a paid digital service that provides a tailored report and application-specific CV draft after payment confirmation and report preparation.",
+            "Private report links are intended for the customer who purchased the review and should be kept secure.",
+          ],
+        },
+        {
           title: "AI-assisted outputs",
           body: [
             "Outputs may be AI-assisted and should be reviewed by the user before being used in any application.",
@@ -25,6 +32,7 @@ export default function TermsPage() {
           title: "Human review option",
           body: [
             "Senior Finance Review adds a human quality layer focused on credibility, seniority, commercial nuance and role-fit.",
+            "Senior Finance Review enters a human review workflow after payment confirmation and is not released automatically through the self-serve report dashboard.",
             "Human review does not replace the user's responsibility to ensure the final CV and application are accurate.",
           ],
         },

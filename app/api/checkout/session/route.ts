@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import { getOrder, getOrderByStripeSessionId, updateOrder } from "@/lib/orders";
 import { getPackageBySlug, isPackageSlug } from "@/lib/productData";
 import { getPackageUnitAmount, isCurrencyCode } from "@/lib/pricing";
+import { buildSignedReportPath, createReportAccessToken } from "@/lib/report-links";
+import {
+  getPaidReportStatusForPackage,
+  sendSeniorReviewCustomerConfirmation,
+  sendSeniorReviewInternalNotification,
+} from "@/lib/senior-review";
 import { getStripeClient } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -56,13 +62,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ verified: false, error: verificationError }, { status: 402 });
     }
 
+    const reportStatus = getPaidReportStatusForPackage(packageSlug, order.reportStatus);
     const updatedOrder = await updateOrder(order.id, {
-      reportStatus: order.reportStatus === "ready" ? "ready" : "not_started",
+      reportStatus,
       status: "paid",
       stripePaymentIntentId:
         typeof session.payment_intent === "string" ? session.payment_intent : undefined,
       stripeSessionId: session.id,
     });
+    const confirmedOrder = updatedOrder ?? { ...order, reportStatus, status: "paid" as const };
+    const reportAccessToken = createReportAccessToken(order.id);
+    const reportAccessPath = buildSignedReportPath(order.id);
+
+    if (
+      packageSlug === "senior-finance-review" &&
+      order.reportStatus !== "awaiting_human_review"
+    ) {
+      await sendSeniorReviewInternalNotification(confirmedOrder);
+      await sendSeniorReviewCustomerConfirmation(confirmedOrder);
+    }
 
     return NextResponse.json({
       verified: true,
@@ -70,7 +88,9 @@ export async function GET(request: Request) {
       orderId: order.id,
       packageName: selectedPackage.name,
       packageSlug,
-      reportStatus: updatedOrder?.reportStatus ?? order.reportStatus,
+      reportAccessPath: reportAccessPath ?? undefined,
+      reportAccessToken: reportAccessToken ?? undefined,
+      reportStatus: confirmedOrder.reportStatus,
       targetCompany: metadata.targetCompany ?? "",
       targetRole: metadata.targetRole ?? "",
     });

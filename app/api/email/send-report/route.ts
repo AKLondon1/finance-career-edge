@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { sendEmail } from "@/lib/email";
+import { getAppUrl } from "@/lib/app-url";
 import { getOrder, getReportOutputByOrderId } from "@/lib/orders";
+import { sendReportReadyCustomerEmail } from "@/lib/report-email";
+import { verifyReportAccessToken } from "@/lib/report-links";
 
 export const runtime = "nodejs";
 
 type SendReportRequest = {
   orderId?: string;
+  token?: string;
 };
 
 export async function POST(request: Request) {
@@ -36,6 +39,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!verifyReportAccessToken(order.id, body.token)) {
+    return NextResponse.json(
+      { sent: false, message: "Report email is not available from this link." },
+      { status: 403 },
+    );
+  }
+
   const reportOutput = await getReportOutputByOrderId(order.id);
 
   if (!reportOutput) {
@@ -45,12 +55,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await sendEmail({
-    subject: "Your Finance Career Edge report is ready",
-    text:
-      "Your tailored role report and new CV draft are ready. Return to Finance Career Edge to view and download both outputs.",
-    to: order.customerEmail,
-  });
+  const result = await sendReportReadyCustomerEmail(
+    { ...order, reportStatus: "ready" },
+    getAppUrl(request),
+  );
 
   return NextResponse.json(result);
 }

@@ -13,6 +13,8 @@ export type VerifiedPurchase = {
   packageSlug: PackageSlug;
   packageName: string;
   currency: CurrencyCode;
+  reportAccessPath?: string;
+  reportAccessToken?: string;
   targetRole?: string;
   targetCompany?: string;
   verifiedAt: string;

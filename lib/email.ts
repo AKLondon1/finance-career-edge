@@ -7,30 +7,34 @@ type SendEmailInput = {
 
 export async function sendEmail({ html, subject, text, to }: SendEmailInput) {
   const apiKey = process.env.RESEND_API_KEY;
-  const supportEmail = process.env.SUPPORT_EMAIL || "support@financecareeredge.com";
+  const fromEmail = process.env.RESEND_FROM_EMAIL;
 
-  if (!apiKey) {
+  if (!apiKey || !fromEmail) {
     return { reason: "Email service is not configured.", sent: false };
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
-    body: JSON.stringify({
-      from: `Finance Career Edge <${supportEmail}>`,
-      html,
-      subject,
-      text,
-      to,
-    }),
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-    },
-    method: "POST",
-  });
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      body: JSON.stringify({
+        from: `Finance Career Edge <${fromEmail}>`,
+        html,
+        subject,
+        text,
+        to,
+      }),
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
 
-  if (!response.ok) {
+    if (!response.ok) {
+      return { reason: "Email could not be sent.", sent: false };
+    }
+
+    return { sent: true };
+  } catch {
     return { reason: "Email could not be sent.", sent: false };
   }
-
-  return { sent: true };
 }

@@ -415,7 +415,8 @@ function mapReportStatus(status: string | null): ReportStatus {
     status === "not_started" ||
     status === "generating" ||
     status === "ready" ||
-    status === "failed"
+    status === "failed" ||
+    status === "awaiting_human_review"
   ) {
     return status;
   }

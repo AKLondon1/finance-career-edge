@@ -22,7 +22,12 @@ export type IntakeSubmission = {
 
 export type OrderStatus = "created" | "checkout_started" | "paid" | "cancelled" | "failed";
 
-export type ReportStatus = "not_started" | "generating" | "ready" | "failed";
+export type ReportStatus =
+  | "not_started"
+  | "generating"
+  | "ready"
+  | "failed"
+  | "awaiting_human_review";
 
 export type OrderRecord = {
   id: string;

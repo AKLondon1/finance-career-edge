@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { CvUploadError, storeCvFile, validateCvFile } from "@/lib/cv-upload";
+import { chooseBestCvEvidence } from "@/lib/cv-text-extraction";
 import { createOrder } from "@/lib/orders";
 import { isPackageSlug } from "@/lib/productData";
 import { isCurrencyCode } from "@/lib/pricing";
@@ -20,6 +21,8 @@ type CreateOrderRequest = {
 
 const orderSetupError =
   "Order setup is temporarily unavailable. Please try again shortly.";
+const cvExtractionError =
+  "We could not read enough CV text from the uploaded file. Please paste your CV text as well or upload a text-based PDF, DOCX or TXT CV.";
 
 export async function POST(request: Request) {
   let body: CreateOrderRequest;
@@ -63,7 +66,15 @@ export async function POST(request: Request) {
     let intake = body.intake as IntakeSubmission;
 
     if (body.cvFile) {
-      const storedFile = await storeCvFile(body.cvFile);
+      const storedFile = await storeCvFile(body.cvFile, {
+        requireReadableText: !intake.cvText?.trim(),
+      });
+      const cvText = chooseBestCvEvidence(intake.cvText, storedFile.extractedText);
+
+      if (!cvText) {
+        return NextResponse.json({ error: cvExtractionError }, { status: 400 });
+      }
+
       intake = {
         ...intake,
         cvFileName: storedFile.cvFileName,
@@ -71,7 +82,7 @@ export async function POST(request: Request) {
         cvFileType: storedFile.cvFileType,
         cvStorageBucket: storedFile.cvStorageBucket,
         cvStoragePath: storedFile.cvStoragePath,
-        cvText: intake.cvText?.trim() || storedFile.extractedText,
+        cvText,
       };
     }
 
@@ -87,6 +98,10 @@ export async function POST(request: Request) {
         code: error.code,
         status: error.status,
       });
+
+      if (isCvExtractionFailure(error.code)) {
+        return NextResponse.json({ error: cvExtractionError }, { status: 400 });
+      }
 
       return NextResponse.json(
         { error: "Your CV file could not be saved. Please try again or paste your CV text instead." },
@@ -166,4 +181,16 @@ function validateOrderRequest(body: CreateOrderRequest) {
 function normaliseCurrency(value: string | undefined): CurrencyCode {
   const upper = value?.toUpperCase() ?? null;
   return isCurrencyCode(upper) ? upper : "GBP";
+}
+
+function isCvExtractionFailure(code: string | undefined) {
+  return (
+    code === "empty-text" ||
+    code === "parse-docx" ||
+    code === "parse-pdf" ||
+    code === "parse-txt" ||
+    code === "short-or-unusable-text" ||
+    code === "unsupported-extension" ||
+    code === "unreadable-cv-text"
+  );
 }

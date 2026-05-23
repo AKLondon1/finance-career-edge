@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/Button";
 import { InsightCard } from "@/components/InsightCard";
+import { ReportPreparationProgress } from "@/components/ReportPreparationProgress";
 import { ReportActions } from "@/components/ReportActions";
 import { ReportDashboard } from "@/components/ReportDashboard";
+import { SeniorReviewStatusCard } from "@/components/SeniorReviewStatusCard";
 import { normaliseReportSection } from "@/lib/report-sections";
 import {
   loadGeneratedReport,
@@ -23,6 +25,9 @@ type ReportState = {
   isVerified: boolean;
   order: OrderRecord | null;
   orderId?: string;
+  reportAccessPath?: string;
+  reportAccessToken?: string;
+  reportLinkEmailSent?: boolean;
   reportStatus?: ReportStatus;
 };
 
@@ -30,12 +35,15 @@ type OrderResponse = {
   error?: string;
   order?: OrderRecord;
   report?: GeneratedReport | null;
+  reportAccessPath?: string;
   reportStatus?: ReportStatus;
 };
 
 type GenerateResponse = {
   error?: string;
   report?: GeneratedReport;
+  reportAccessPath?: string;
+  reportLinkEmailSent?: boolean;
   reportStatus?: ReportStatus;
 };
 
@@ -56,10 +64,14 @@ export function ReportPageClient() {
       const verifiedPurchase = loadVerifiedPurchase();
       const requestedOrderId =
         searchParams.get("orderId") ?? verifiedPurchase?.orderId ?? loadPendingOrderId();
+      const requestedToken =
+        searchParams.get("token") ?? verifiedPurchase?.reportAccessToken ?? "";
 
       if (requestedOrderId) {
         try {
-          const response = await fetch(`/api/orders/${encodeURIComponent(requestedOrderId)}`);
+          const response = await fetch(
+            buildOrderApiHref(requestedOrderId, requestedToken),
+          );
           const data = (await response.json()) as OrderResponse;
 
           if (!response.ok || !data.order) {
@@ -81,6 +93,9 @@ export function ReportPageClient() {
             order: data.order,
             orderId: data.order.id,
             report: data.report ?? null,
+            reportAccessPath:
+              data.reportAccessPath ?? buildClientReportPath(data.order.id, requestedToken),
+            reportAccessToken: requestedToken || undefined,
             reportStatus: data.reportStatus ?? data.order.reportStatus,
           });
           setIsReady(true);
@@ -108,6 +123,8 @@ export function ReportPageClient() {
       order: null,
       orderId: verifiedPurchase?.orderId,
       report,
+      reportAccessPath: verifiedPurchase?.reportAccessPath,
+      reportAccessToken: verifiedPurchase?.reportAccessToken,
     });
     setIsReady(true);
     }
@@ -120,12 +137,19 @@ export function ReportPageClient() {
       return;
     }
 
+    if (reportState.order?.packageSlug === "senior-finance-review") {
+      return;
+    }
+
     setIsGenerating(true);
     setReportState((current) => ({ ...current, error: undefined }));
 
     try {
       const response = await fetch("/api/reports/generate", {
-        body: JSON.stringify({ orderId: reportState.orderId }),
+        body: JSON.stringify({
+          orderId: reportState.orderId,
+          token: reportState.reportAccessToken,
+        }),
         headers: {
           "Content-Type": "application/json",
         },
@@ -142,6 +166,8 @@ export function ReportPageClient() {
         ...current,
         isVerified: true,
         report: data.report ?? current.report,
+        reportAccessPath: data.reportAccessPath ?? current.reportAccessPath,
+        reportLinkEmailSent: data.reportLinkEmailSent,
         reportStatus: data.reportStatus ?? "ready",
       }));
     } catch (error) {
@@ -212,6 +238,16 @@ export function ReportPageClient() {
     return <EmptyReportState />;
   }
 
+  if (reportState.order?.packageSlug === "senior-finance-review") {
+    return (
+      <SeniorReviewStatusCard
+        orderId={reportState.order.id}
+        targetCompany={reportState.order.targetCompany}
+        targetRole={reportState.order.targetRole}
+      />
+    );
+  }
+
   if (reportState.order && !reportState.report) {
     return (
       <div className="mx-auto max-w-3xl rounded-[2rem] border border-ink/10 bg-white p-6 text-center shadow-soft sm:p-10">
@@ -230,6 +266,7 @@ export function ReportPageClient() {
             {reportState.error}
           </p>
         ) : null}
+        {isGenerating ? <ReportPreparationProgress active={isGenerating} /> : null}
         <Button
           className="mt-7"
           disabled={isGenerating}
@@ -248,21 +285,72 @@ export function ReportPageClient() {
 
   return (
     <ReportDashboard
-      actionBar={<ReportActions report={reportState.report} />}
+      actionBar={
+        <ReportActions
+          privateReportUrl={buildAbsoluteReportUrl(reportState.reportAccessPath)}
+          report={reportState.report}
+          reportLinkEmailSent={reportState.reportLinkEmailSent}
+        />
+      }
       activeSection={activeSection}
       generatedDate={formatGeneratedDate(reportState.report.id)}
       report={reportState.report}
-      sectionBaseHref={buildReportSectionBaseHref(searchParams, reportState.orderId)}
+      sectionBaseHref={buildReportSectionBaseHref(
+        searchParams,
+        reportState.orderId,
+        reportState.reportAccessToken,
+      )}
     />
   );
 }
 
-function buildReportSectionBaseHref(searchParams: { toString: () => string }, orderId?: string) {
+function buildOrderApiHref(orderId: string, token: string) {
+  const params = new URLSearchParams();
+
+  if (token) {
+    params.set("token", token);
+  }
+
+  const query = params.toString();
+
+  return `/api/orders/${encodeURIComponent(orderId)}${query ? `?${query}` : ""}`;
+}
+
+function buildClientReportPath(orderId: string, token: string) {
+  if (!token) {
+    return undefined;
+  }
+
+  const params = new URLSearchParams({
+    orderId,
+    token,
+  });
+
+  return `/report?${params.toString()}`;
+}
+
+function buildAbsoluteReportUrl(reportAccessPath: string | undefined) {
+  if (!reportAccessPath || typeof window === "undefined") {
+    return undefined;
+  }
+
+  return new URL(reportAccessPath, window.location.origin).toString();
+}
+
+function buildReportSectionBaseHref(
+  searchParams: { toString: () => string },
+  orderId?: string,
+  token?: string,
+) {
   const params = new URLSearchParams(searchParams.toString());
   params.delete("section");
 
   if (orderId) {
     params.set("orderId", orderId);
+  }
+
+  if (token) {
+    params.set("token", token);
   }
 
   const query = params.toString();

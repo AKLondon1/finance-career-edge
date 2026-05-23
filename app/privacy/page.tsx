@@ -12,6 +12,7 @@ export default function PrivacyPage() {
           body: [
             "We collect the information you provide through the intake form, including your name, email address, target role, CV content, selected package and any optional role context.",
             "CV and role information may include employment history, achievements, target company details, job advert text and your stated concerns about the application.",
+            "If you upload a CV file, we store the file privately and keep related metadata such as file name, file type, file size and storage reference.",
           ],
         },
         {
@@ -19,6 +20,21 @@ export default function PrivacyPage() {
           body: [
             "Information is used to prepare your tailored role report, new CV draft, interview talking points and application recommendations.",
             "Where Senior Finance Review is selected, the information is also used to support the human quality review.",
+            "AI-assisted processing may be used to prepare report content, with deterministic internal generation available if an AI provider is not available.",
+          ],
+        },
+        {
+          title: "Storage and report links",
+          body: [
+            "Uploaded CV files are stored in private storage and are not made available through public file URLs.",
+            "Private report links are signed server-side and still require the underlying order to be paid before report output is shown.",
+          ],
+        },
+        {
+          title: "Email",
+          body: [
+            "We may email payment, report-ready or Senior Finance Review updates to the email address provided during intake.",
+            "Customer emails do not include full CV text or uploaded CV file contents.",
           ],
         },
         {
@@ -30,8 +46,8 @@ export default function PrivacyPage() {
         {
           title: "Retention",
           body: [
-            "Submitted information should be retained only for as long as needed to provide the service, respond to support queries and meet reasonable operational requirements.",
-            "A detailed retention schedule should be confirmed before live payment and storage services are connected.",
+            "Submitted information is retained only for as long as needed to provide the service, respond to support queries and meet reasonable operational requirements.",
+            "A detailed retention and deletion process should be reviewed before broader launch.",
           ],
         },
         {

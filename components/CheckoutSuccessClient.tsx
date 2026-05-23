@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/Button";
 import { InsightCard } from "@/components/InsightCard";
+import { ReportPreparationProgress } from "@/components/ReportPreparationProgress";
+import { SeniorReviewStatusCard } from "@/components/SeniorReviewStatusCard";
 import { getPackageBySlug, isPackageSlug } from "@/lib/productData";
 import { savePendingOrderId, saveVerifiedPurchase } from "@/lib/report-storage";
 import type { CurrencyCode } from "@/lib/pricing";
@@ -19,6 +21,8 @@ type VerificationResponse = {
   orderId?: string;
   packageName?: string;
   packageSlug?: PackageSlug;
+  reportAccessPath?: string;
+  reportAccessToken?: string;
   reportStatus?: ReportStatus;
   targetCompany?: string;
   targetRole?: string;
@@ -26,6 +30,7 @@ type VerificationResponse = {
 
 type GenerateResponse = {
   error?: string;
+  reportAccessPath?: string;
   reportStatus?: ReportStatus;
 };
 
@@ -37,9 +42,14 @@ export function CheckoutSuccessClient() {
   const [actionHref, setActionHref] = useState("/report");
   const [actionLabel, setActionLabel] = useState("View my report");
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [confirmedPackageSlug, setConfirmedPackageSlug] = useState<PackageSlug | null>(null);
   const [needsReportPreparation, setNeedsReportPreparation] = useState(false);
   const [isPreparingReport, setIsPreparingReport] = useState(false);
   const [prepareError, setPrepareError] = useState("");
+  const [reportAccessPath, setReportAccessPath] = useState("");
+  const [reportAccessToken, setReportAccessToken] = useState("");
+  const [targetCompany, setTargetCompany] = useState("");
+  const [targetRole, setTargetRole] = useState("");
   const [successTitle, setSuccessTitle] = useState(
     "Your tailored report and CV draft are ready.",
   );
@@ -66,14 +76,22 @@ export function CheckoutSuccessClient() {
         }
 
         const selectedPackage = getPackageBySlug(data.packageSlug);
-        const reportHref = `/report?orderId=${encodeURIComponent(data.orderId)}`;
+        const reportHref =
+          data.reportAccessPath ?? `/report?orderId=${encodeURIComponent(data.orderId)}`;
         setOrderId(data.orderId);
+        setConfirmedPackageSlug(data.packageSlug);
+        setReportAccessPath(data.reportAccessPath ?? "");
+        setReportAccessToken(data.reportAccessToken ?? "");
+        setTargetCompany(data.targetCompany ?? "");
+        setTargetRole(data.targetRole ?? "");
         savePendingOrderId(data.orderId);
         saveVerifiedPurchase({
           currency: data.currency ?? "GBP",
           orderId: data.orderId,
           packageName: data.packageName ?? selectedPackage.name,
           packageSlug: data.packageSlug,
+          reportAccessPath: data.reportAccessPath,
+          reportAccessToken: data.reportAccessToken,
           sessionId: checkoutSessionId,
           targetCompany: data.targetCompany,
           targetRole: data.targetRole,
@@ -81,17 +99,23 @@ export function CheckoutSuccessClient() {
         });
 
         setActionHref(reportHref);
-        if (data.reportStatus === "ready") {
+        if (data.packageSlug === "senior-finance-review") {
+          setActionLabel("View review status");
+          setNeedsReportPreparation(false);
+          setSuccessTitle("Your Senior Finance Review is underway.");
+          setMessage("Payment has been received and your review details have been submitted.");
+        } else if (data.reportStatus === "ready") {
           setActionLabel("View my report");
           setNeedsReportPreparation(false);
           setSuccessTitle("Your tailored report and CV draft are ready.");
+          setMessage("Your report is available to view and download.");
         } else {
           setActionLabel("Get my report");
           setNeedsReportPreparation(true);
           setSuccessTitle("Payment confirmed.");
+          setMessage("Your review details are ready for report preparation.");
         }
         setState("success");
-        setMessage("Your review details are ready for report preparation.");
       } catch (error) {
         setState("error");
         setMessage(
@@ -116,7 +140,7 @@ export function CheckoutSuccessClient() {
 
     try {
       const response = await fetch("/api/reports/generate", {
-        body: JSON.stringify({ orderId }),
+        body: JSON.stringify({ orderId, token: reportAccessToken }),
         headers: {
           "Content-Type": "application/json",
         },
@@ -128,7 +152,11 @@ export function CheckoutSuccessClient() {
         throw new Error(data.error || "We could not prepare your report. Please try again shortly.");
       }
 
-      router.push(`/report?orderId=${encodeURIComponent(orderId)}`);
+      router.push(
+        data.reportAccessPath ||
+          reportAccessPath ||
+          `/report?orderId=${encodeURIComponent(orderId)}`,
+      );
     } catch (error) {
       setPrepareError(
         error instanceof Error
@@ -168,6 +196,17 @@ export function CheckoutSuccessClient() {
     );
   }
 
+  if (confirmedPackageSlug === "senior-finance-review") {
+    return (
+      <SeniorReviewStatusCard
+        actionHref={actionHref}
+        orderId={orderId ?? undefined}
+        targetCompany={targetCompany}
+        targetRole={targetRole}
+      />
+    );
+  }
+
   return (
     <div className="mx-auto max-w-3xl rounded-[2rem] border border-ink/10 bg-white p-6 text-center shadow-soft sm:p-10">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brass">
@@ -184,6 +223,7 @@ export function CheckoutSuccessClient() {
           {prepareError}
         </p>
       ) : null}
+      {isPreparingReport ? <ReportPreparationProgress active={isPreparingReport} /> : null}
       {needsReportPreparation ? (
         <Button
           className="mt-7"
