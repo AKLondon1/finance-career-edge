@@ -184,6 +184,7 @@ async function extractPdfText(buffer: Buffer) {
       extractedCharacterCount: metrics.characterCount,
       extractedWordCount: metrics.wordCount,
       parser: "pdfjs-dist",
+      workerMode: "bundled-fake-worker",
     });
 
     if (isUsefulCvText(metrics)) {
@@ -194,12 +195,14 @@ async function extractPdfText(buffer: Buffer) {
       extractedCharacterCount: metrics.characterCount,
       extractedWordCount: metrics.wordCount,
       parser: "pdfjs-dist",
+      workerMode: "bundled-fake-worker",
     });
   } catch (error) {
     console.warn("PDF text extraction parser failed; retrying", {
       errorName: error instanceof Error ? error.name : "UnknownError",
       errorSummary: summariseErrorMessage(error),
       parser: "pdfjs-dist",
+      workerMode: "bundled-fake-worker",
     });
   }
 
