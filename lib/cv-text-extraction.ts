@@ -44,6 +44,16 @@ type PdfTextContentItem = {
   hasEOL?: boolean;
   str?: string;
 };
+type CanvasPolyfillModule = {
+  DOMMatrix?: unknown;
+  ImageData?: unknown;
+  Path2D?: unknown;
+};
+type CanvasPolyfillGlobal = {
+  DOMMatrix?: unknown;
+  ImageData?: unknown;
+  Path2D?: unknown;
+};
 
 const nodeRequire = createRequire(import.meta.url);
 
@@ -271,6 +281,8 @@ async function extractPdfTextWithPdfParse(buffer: Buffer) {
 }
 
 async function loadPdfJs(): Promise<PdfJsModule> {
+  await ensurePdfNodeCanvasPolyfills();
+
   return import("pdfjs-dist/legacy/build/pdf.mjs");
 }
 
@@ -283,6 +295,41 @@ async function loadMammoth(): Promise<MammothApi> {
   const maybeDefault = (module as { default?: MammothApi }).default;
 
   return maybeDefault ?? (module as unknown as MammothApi);
+}
+
+async function ensurePdfNodeCanvasPolyfills() {
+  const target = globalThis as CanvasPolyfillGlobal;
+
+  if (target.DOMMatrix && target.ImageData && target.Path2D) {
+    return;
+  }
+
+  try {
+    const canvas = (await import("@napi-rs/canvas")) as unknown as CanvasPolyfillModule;
+
+    if (!target.DOMMatrix && canvas.DOMMatrix) {
+      target.DOMMatrix = canvas.DOMMatrix;
+    }
+
+    if (!target.ImageData && canvas.ImageData) {
+      target.ImageData = canvas.ImageData;
+    }
+
+    if (!target.Path2D && canvas.Path2D) {
+      target.Path2D = canvas.Path2D;
+    }
+
+    console.info("PDF canvas polyfills checked", {
+      hasDOMMatrix: Boolean(target.DOMMatrix),
+      hasImageData: Boolean(target.ImageData),
+      hasPath2D: Boolean(target.Path2D),
+    });
+  } catch (error) {
+    console.warn("PDF canvas polyfill load failed", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorSummary: summariseErrorMessage(error),
+    });
+  }
 }
 
 function getTextMetrics(text: string) {

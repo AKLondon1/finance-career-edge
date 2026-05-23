@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["mammoth", "pdf-parse"],
+  serverExternalPackages: ["@napi-rs/canvas", "mammoth", "pdf-parse", "pdfjs-dist"],
 };
 
 export default nextConfig;
