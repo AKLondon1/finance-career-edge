@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+
 import type { AcceptedCvExtension } from "@/lib/cv-file-rules";
 
 export type CvExtractionFailureStage =
@@ -25,6 +27,18 @@ type CvTextExtractionInput = {
 type MammothApi = {
   extractRawText(input: { buffer: Buffer }): Promise<{ value: string }>;
 };
+
+type PdfParseApi = {
+  PDFParse: new (input: { data: Buffer; verbosity?: unknown }) => {
+    destroy(): Promise<void>;
+    getText(options?: { lineEnforce?: boolean; pageJoiner?: string }): Promise<{ text: string }>;
+  };
+  VerbosityLevel: {
+    ERRORS: unknown;
+  };
+};
+
+const nodeRequire = createRequire(import.meta.url);
 
 export const MIN_EXTRACTED_CV_TEXT_CHARS = 120;
 export const MAX_STORED_CV_TEXT_CHARS = 50000;
@@ -131,9 +145,9 @@ async function extractRawText(
   }
 
   if (extension === ".pdf") {
-    const { PDFParse, VerbosityLevel } = await import("pdf-parse");
+    const { PDFParse, VerbosityLevel } = await loadPdfParse();
     const parser = new PDFParse({
-      data: new Uint8Array(arrayBuffer),
+      data: Buffer.from(arrayBuffer),
       verbosity: VerbosityLevel.ERRORS,
     });
 
@@ -149,6 +163,10 @@ async function extractRawText(
   }
 
   return "";
+}
+
+async function loadPdfParse(): Promise<PdfParseApi> {
+  return nodeRequire("pdf-parse") as PdfParseApi;
 }
 
 async function loadMammoth(): Promise<MammothApi> {
