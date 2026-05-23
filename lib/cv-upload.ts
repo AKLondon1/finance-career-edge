@@ -1,10 +1,13 @@
 import {
   CV_UPLOAD_BUCKET,
+  formatMaxCvFileSize,
   getFileExtension,
   isAcceptedCvExtension,
   MAX_CV_FILE_SIZE_BYTES,
 } from "@/lib/cv-file-rules";
+import { extractCvTextFromFile } from "@/lib/cv-text-extraction";
 import { getSupabaseServerConfig } from "@/lib/supabase/server";
+import type { CvTextExtractionResult } from "@/lib/cv-text-extraction";
 
 export type StoredCvFile = {
   cvFileName: string;
@@ -12,7 +15,12 @@ export type StoredCvFile = {
   cvFileType: string;
   cvStorageBucket: string;
   cvStoragePath: string;
+  extraction: CvTextExtractionResult;
   extractedText?: string;
+};
+
+type StoreCvFileOptions = {
+  requireReadableText?: boolean;
 };
 
 const allowedMimeTypes: Record<string, string[]> = {
@@ -47,7 +55,7 @@ export function validateCvFile(file: File) {
   }
 
   if (file.size > MAX_CV_FILE_SIZE_BYTES) {
-    return "Upload a CV file under 5MB.";
+    return `Upload a CV file under ${formatMaxCvFileSize()}.`;
   }
 
   const mimeType = file.type.toLowerCase();
@@ -60,7 +68,10 @@ export function validateCvFile(file: File) {
   return null;
 }
 
-export async function storeCvFile(file: File): Promise<StoredCvFile> {
+export async function storeCvFile(
+  file: File,
+  options: StoreCvFileOptions = {},
+): Promise<StoredCvFile> {
   const validationError = validateCvFile(file);
 
   if (validationError) {
@@ -74,6 +85,11 @@ export async function storeCvFile(file: File): Promise<StoredCvFile> {
   }
 
   const extension = getFileExtension(file.name);
+
+  if (!isAcceptedCvExtension(extension)) {
+    throw new CvUploadError("Unsupported CV file type.", 400, "invalid-file");
+  }
+
   const safeFileName = sanitiseFileName(file.name);
   const storagePath = [
     new Date().toISOString().slice(0, 10),
@@ -84,6 +100,29 @@ export async function storeCvFile(file: File): Promise<StoredCvFile> {
     file.type && file.type !== "application/octet-stream"
       ? file.type
       : contentTypeForExtension(extension);
+  const extraction = await extractCvTextFromFile({
+    arrayBuffer,
+    extension,
+    fileSize: file.size,
+    fileType: contentType,
+  });
+
+  console.info("CV text extraction completed", {
+    extractedCharacterCount: extraction.characterCount,
+    extractionSuccess: extraction.success,
+    failureStage: extraction.failureStage ?? null,
+    fileSize: file.size,
+    fileType: contentType,
+  });
+
+  if (options.requireReadableText && !extraction.text) {
+    throw new CvUploadError(
+      "CV text could not be extracted.",
+      400,
+      extraction.failureStage ?? "unreadable-cv-text",
+    );
+  }
+
   const response = await fetch(
     `${config.url}/storage/v1/object/${CV_UPLOAD_BUCKET}/${encodeStoragePath(storagePath)}`,
     {
@@ -113,7 +152,8 @@ export async function storeCvFile(file: File): Promise<StoredCvFile> {
     cvFileType: contentType,
     cvStorageBucket: CV_UPLOAD_BUCKET,
     cvStoragePath: storagePath,
-    extractedText: extension === ".txt" ? extractPlainText(arrayBuffer) : undefined,
+    extraction,
+    extractedText: extraction.text,
   };
 }
 
@@ -141,8 +181,4 @@ function contentTypeForExtension(extension: string) {
   }
 
   return "text/plain";
-}
-
-function extractPlainText(arrayBuffer: ArrayBuffer) {
-  return new TextDecoder("utf-8", { fatal: false }).decode(arrayBuffer).trim();
 }

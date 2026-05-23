@@ -5,7 +5,7 @@ values (
   'cv-uploads',
   'cv-uploads',
   false,
-  5242880,
+  4194304,
   array[
     'application/pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',

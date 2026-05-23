@@ -1,5 +1,5 @@
 export const CV_UPLOAD_BUCKET = "cv-uploads";
-export const MAX_CV_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+export const MAX_CV_FILE_SIZE_BYTES = 4 * 1024 * 1024;
 export const CV_FILE_ACCEPT = ".pdf,.docx,.txt";
 export const ACCEPTED_CV_EXTENSIONS = [".pdf", ".docx", ".txt"] as const;
 
@@ -21,5 +21,5 @@ export function isAcceptedCvExtension(extension: string): extension is AcceptedC
 }
 
 export function formatMaxCvFileSize() {
-  return "5MB";
+  return "4MB";
 }
