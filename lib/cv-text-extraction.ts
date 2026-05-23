@@ -15,6 +15,7 @@ export type CvTextExtractionResult = {
   failureStage?: CvExtractionFailureStage;
   success: boolean;
   text?: string;
+  wordCount: number;
 };
 
 type CvTextExtractionInput = {
@@ -36,6 +37,12 @@ type PdfParseApi = {
   VerbosityLevel: {
     ERRORS: unknown;
   };
+};
+
+type PdfJsModule = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
+type PdfTextContentItem = {
+  hasEOL?: boolean;
+  str?: string;
 };
 
 const nodeRequire = createRequire(import.meta.url);
@@ -67,6 +74,7 @@ export async function extractCvTextFromFile({
       characterCount: 0,
       failureStage,
       success: false,
+      wordCount: 0,
     };
   }
 }
@@ -90,23 +98,29 @@ export function validateExtractedCvText(value: string | undefined): CvTextExtrac
       characterCount: 0,
       failureStage: "empty-text",
       success: false,
+      wordCount: 0,
     };
   }
 
-  if (!isUsefulCvText(normalised)) {
+  const metrics = getTextMetrics(normalised);
+
+  if (!isUsefulCvText(metrics)) {
     return {
-      characterCount: normalised.length,
+      characterCount: metrics.characterCount,
       failureStage: "short-or-unusable-text",
       success: false,
+      wordCount: metrics.wordCount,
     };
   }
 
   const text = truncateCvText(normalised);
+  const truncatedMetrics = getTextMetrics(text);
 
   return {
-    characterCount: text.length,
+    characterCount: truncatedMetrics.characterCount,
     success: true,
     text,
+    wordCount: truncatedMetrics.wordCount,
   };
 }
 
@@ -145,24 +159,119 @@ async function extractRawText(
   }
 
   if (extension === ".pdf") {
-    const { PDFParse, VerbosityLevel } = await loadPdfParse();
-    const parser = new PDFParse({
-      data: Buffer.from(arrayBuffer),
-      verbosity: VerbosityLevel.ERRORS,
-    });
-
-    try {
-      const result = await parser.getText({
-        lineEnforce: true,
-        pageJoiner: "\n\n",
-      });
-      return result.text;
-    } finally {
-      await parser.destroy();
-    }
+    return extractPdfText(Buffer.from(arrayBuffer));
   }
 
   return "";
+}
+
+async function extractPdfText(buffer: Buffer) {
+  try {
+    const text = await extractPdfTextWithPdfJs(buffer);
+    const metrics = getTextMetrics(normaliseCvText(text));
+
+    console.info("PDF text extraction parser completed", {
+      extractedCharacterCount: metrics.characterCount,
+      extractedWordCount: metrics.wordCount,
+      parser: "pdfjs-dist",
+    });
+
+    if (isUsefulCvText(metrics)) {
+      return text;
+    }
+
+    console.warn("PDF text extraction parser returned limited text; retrying", {
+      extractedCharacterCount: metrics.characterCount,
+      extractedWordCount: metrics.wordCount,
+      parser: "pdfjs-dist",
+    });
+  } catch (error) {
+    console.warn("PDF text extraction parser failed; retrying", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorSummary: summariseErrorMessage(error),
+      parser: "pdfjs-dist",
+    });
+  }
+
+  const text = await extractPdfTextWithPdfParse(buffer);
+  const metrics = getTextMetrics(normaliseCvText(text));
+
+  console.info("PDF text extraction parser completed", {
+    extractedCharacterCount: metrics.characterCount,
+    extractedWordCount: metrics.wordCount,
+    parser: "pdf-parse",
+  });
+
+  return text;
+}
+
+async function extractPdfTextWithPdfJs(buffer: Buffer) {
+  const pdfjs = await loadPdfJs();
+  const bytes = Uint8Array.from(buffer);
+  const loadingTask = pdfjs.getDocument({
+    data: bytes,
+    disableFontFace: true,
+    isEvalSupported: false,
+    useSystemFonts: false,
+    useWasm: false,
+    useWorkerFetch: false,
+    verbosity: pdfjs.VerbosityLevel.ERRORS,
+  });
+  const document = await loadingTask.promise;
+
+  try {
+    const pages: string[] = [];
+
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const textContent = await page.getTextContent({
+        disableNormalization: false,
+        includeMarkedContent: false,
+      });
+      const pageText: string[] = [];
+
+      for (const item of textContent.items as PdfTextContentItem[]) {
+        if (typeof item.str !== "string" || !item.str) {
+          continue;
+        }
+
+        pageText.push(item.str);
+
+        if (item.hasEOL) {
+          pageText.push("\n");
+        }
+      }
+
+      pages.push(pageText.join(" "));
+      page.cleanup();
+    }
+
+    return pages.join("\n\n");
+  } finally {
+    await document.destroy();
+  }
+}
+
+async function extractPdfTextWithPdfParse(buffer: Buffer) {
+  const { PDFParse, VerbosityLevel } = await loadPdfParse();
+  const parser = new PDFParse({
+    data: buffer,
+    verbosity: VerbosityLevel.ERRORS,
+  });
+
+  try {
+    const result = await parser.getText({
+      lineEnforce: true,
+      pageJoiner: "\n\n",
+    });
+    return result.text;
+  } finally {
+    await parser.destroy();
+  }
+}
+
+async function loadPdfJs(): Promise<PdfJsModule> {
+  return import("pdfjs-dist/legacy/build/pdf.mjs");
 }
 
 async function loadPdfParse(): Promise<PdfParseApi> {
@@ -176,14 +285,22 @@ async function loadMammoth(): Promise<MammothApi> {
   return maybeDefault ?? (module as unknown as MammothApi);
 }
 
-function isUsefulCvText(text: string) {
+function getTextMetrics(text: string) {
   const letterCount = text.match(/\p{L}/gu)?.length ?? 0;
   const wordCount = text.match(/\p{L}[\p{L}'-]{1,}/gu)?.length ?? 0;
 
+  return {
+    characterCount: text.length,
+    letterCount,
+    wordCount,
+  };
+}
+
+function isUsefulCvText(metrics: ReturnType<typeof getTextMetrics>) {
   return (
-    text.length >= MIN_EXTRACTED_CV_TEXT_CHARS &&
-    wordCount >= 25 &&
-    letterCount / text.length >= 0.25
+    metrics.characterCount >= MIN_EXTRACTED_CV_TEXT_CHARS &&
+    metrics.wordCount >= 25 &&
+    metrics.letterCount / metrics.characterCount >= 0.25
   );
 }
 

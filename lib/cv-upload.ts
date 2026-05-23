@@ -28,7 +28,15 @@ const allowedMimeTypes: Record<string, string[]> = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/octet-stream",
   ],
-  ".pdf": ["application/pdf", "application/octet-stream"],
+  ".pdf": [
+    "application/acrobat",
+    "application/octet-stream",
+    "application/pdf",
+    "application/x-pdf",
+    "applications/vnd.pdf",
+    "text/pdf",
+    "text/x-pdf",
+  ],
   ".txt": ["text/plain", "application/octet-stream"],
 };
 
@@ -109,8 +117,10 @@ export async function storeCvFile(
 
   console.info("CV text extraction completed", {
     extractedCharacterCount: extraction.characterCount,
+    extractedWordCount: extraction.wordCount,
     extractionSuccess: extraction.success,
     failureStage: extraction.failureStage ?? null,
+    fileExtension: extension,
     fileSize: file.size,
     fileType: contentType,
   });
